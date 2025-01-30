@@ -1,4 +1,4 @@
-import express, { Application } from 'express';
+import authRouter from './routes/auth';import express, { Application } from 'express';
 import bodyParser from 'body-parser';
 import { config } from "dotenv";
 import expressWinston from "express-winston";
@@ -50,3 +50,4 @@ app.use((req, res, next) => {
 app.use(errorMiddleware)
 
 export default app;
+app.use('/auth', authRouter);

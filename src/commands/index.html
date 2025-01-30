@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Angry Birds Clone</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
+    <style>
+        canvas { border: 1px solid black; }
+        #score { font-size: 24px; }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0</div>
+    <button id="reset">Reset Game</button>
+    <canvas width="800" height="600"></canvas>
+
+    <script>
+        // Module aliases
+        const Engine = Matter.Engine,
+            Render = Matter.Render,
+            World = Matter.World,
+            Bodies = Matter.Bodies,
+            Body = Matter.Body,
+            Events = Matter.Events;
+
+        // Create engine
+        const engine = Engine.create();
+        let currentBird = null;
+        let isDragging = false;
+        let score = 0;
+
+        // Create renderer
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            canvas: document.querySelector('canvas'),
+            options: {
+                width: 800,
+                height: 600,
+                wireframes: false
+            }
+        });
+
+        // Create ground
+        const ground = Bodies.rectangle(400, 590, 810, 20, { 
+            isStatic: true,
+            render: {
+                fillStyle: '#666'
+            }
+        });
+
+        // Create slingshot
+        const slingshot = {
+            x: 200,
+            y: 450,
+            radius: 20
+        };
+
+        // Create birds
+        const birds = [
+            Bodies.circle(slingshot.x, slingshot.y, 15, {
+                render: {
+                    fillStyle: 'red'
+                },
+                label: 'bird'
+            })
+        ];
+
+        // Create obstacles
+        const obstacles = [];
+        function createStructure() {
+            // Base structure
+            const base = Bodies.rectangle(600, 500, 200, 20, {
+                isStatic: true,
+                render: { fillStyle: '#8B4513' }
+            });
+
+            // Vertical pillars
+            const pillar1 = Bodies.rectangle(550, 450, 20, 100, {
+                isStatic: true,
+                render: { fillStyle: '#8B4513' }
+            });
+
+            const pillar2 = Bodies.rectangle(650, 450, 20, 100, {
+                isStatic: true,
+                render: { fillStyle: '#8B4513' }
+            });
+
+            // Top platform
+            const top = Bodies.rectangle(600, 400, 200, 20, {
+                isStatic: true,
+                render: { fillStyle: '#8B4513' }
+            });
+
+            World.add(engine.world, [base, pillar1, pillar2, top]);
+            obstacles.push(base, pillar1, pillar2, top);
+        }
+
+        // Mouse handling
+        document.addEventListener('mousedown', (e) => {
+            if (currentBird && !isDragging) {
+                isDragging = true;
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging && currentBird) {
+                const rect = render.canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                Body.setPosition(currentBird, {
+                    x: mouseX,
+                    y: mouseY
+                });
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (isDragging && currentBird) {
+                isDragging = false;
+                
+                // Calculate launch velocity
+                const deltaX = slingshot.x - currentBird.position.x;
+                const deltaY = slingshot.y - currentBird.position.y;
+                Body.setVelocity(currentBird, { x: deltaX * 0.5, y: deltaY * 0.5 });
+                
+                currentBird = null;
+                setTimeout(loadNextBird, 1000);
+            }
+        });
+
+        // Load next bird
+        function loadNextBird() {
+            if (birds.length > 0) {
+                currentBird = birds.shift();
+                currentBird.isStatic = true;
+                World.add(engine.world, currentBird);
+                Body.setPosition(currentBird, { x: slingshot.x, y: slingshot.y });
+            }
+        }
+
+        // Score tracking
+        Events.on(engine, 'collisionStart', (event) => {
+            event.pairs.forEach((pair) => {
+                if (pair.bodyA.label === 'bird' || pair.bodyB.label === 'bird') {
+                    const obstacle = pair.bodyA.label === 'bird' ? pair.bodyB : pair.bodyA;
+                    if (obstacles.includes(obstacle)) {
+                        score += 10;
+                        document.getElementById('score').textContent = `Score: ${score}`;
+                        World.remove(engine.world, obstacle);
+                    }
+                }
+            });
+        });
+
+        // Reset game
+        document.getElementById('reset').addEventListener('click', () => {
+            World.clear(engine.world);
+            World.add(engine.world, ground);
+            birds.length = 0;
+            birds.push(
+                Bodies.circle(slingshot.x, slingshot.y, 15, {
+                    render: { fillStyle: 'red' },
+                    label: 'bird'
+                })
+            );
+            obstacles.length = 0;
+            createStructure();
+            score = 0;
+            document.getElementById('score').textContent = `Score: ${score}`;
+            loadNextBird();
+        });
+
+        // Start the game
+        World.add(engine.world, [ground]);
+        createStructure();
+        loadNextBird();
+        Engine.run(engine);
+        Render.run(render);
+    </script>
+</body>
+</html>
