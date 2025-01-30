@@ -10,7 +10,7 @@ const ConnectToDB = async () => {
 
   try {
     await mongoose.connect(DatabaseUrl, {
-      autoIndex: true, // Enable automatic index creation
+      autoIndex: true, 
     });
     db = mongoose.connection;
     console.log("DB Connected.");

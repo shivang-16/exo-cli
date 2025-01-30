@@ -10,6 +10,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PROJECT_TYPES = ['express', 'react', 'next'];
+const DATABASE_OPTIONS = {
+  mongodb: 'MongoDB with Mongoose',
+  postgres: 'PostgreSQL with Prisma'
+};
 
 export const createProject = async (options) => {
   try {
@@ -63,6 +67,35 @@ export const createProject = async (options) => {
       return;
     }
 
+    let selectedDatabase = null;
+    
+    // Ask for database setup only for Express projects
+    if (projectType === 'express') {
+      const { wantDatabase } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'wantDatabase',
+          message: 'Would you like to set up a database?',
+          default: false
+        }
+      ]);
+
+      if (wantDatabase) {
+        const { database } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'database',
+            message: 'Select your database:',
+            choices: Object.entries(DATABASE_OPTIONS).map(([value, name]) => ({
+              name,
+              value
+            }))
+          }
+        ]);
+        selectedDatabase = database;
+      }
+    }
+
     // Copy files with filter to exclude problematic directories
     await fs.copy(templatesDir, targetDir, {
       filter: (src) => {
@@ -71,6 +104,29 @@ export const createProject = async (options) => {
                !src.includes('tsserver');
       }
     });
+
+    // Handle database setup if selected
+    if (selectedDatabase) {
+      const dbTemplateDir = path.resolve(__dirname, `../templates/express/${language}/database/${selectedDatabase}`);
+      if (!fs.existsSync(dbTemplateDir)) {
+        console.warn(`⚠️ Database template for ${selectedDatabase} not found`);
+      } else {
+        await fs.copy(dbTemplateDir, targetDir);
+        
+        // Update package.json with database dependencies
+        const pkgPath = path.join(targetDir, 'package.json');
+        const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
+        
+        // Store database info in config
+        const configPath = path.join(targetDir, ".exo-config.json");
+        const config = fs.existsSync(configPath)
+          ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
+          : { features: [] };
+        
+        config.database = selectedDatabase;
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      }
+    }
 
     // Handle features if provided
     if (options.features && options.features.length > 0) {
