@@ -6,7 +6,7 @@ import winston from "winston";
 import cors from 'cors';
 import morgan from 'morgan';
 import routes from './routes/route-name';
-import errorMiddleware from './middleware/customError';
+import errorMiddleware from './middleware/error';
 
 const app: Application = express();
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { promptLanguage } from "../utils/helper.js";
 import inquirer from 'inquirer';
-import { updateAppFile } from "../utils/updateAppFile.js";
+import { mergeDirectories } from "../utils/mergeFiles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -129,6 +129,7 @@ export const createProject = async (options) => {
     }
 
     // Handle features if provided
+    // In the createProject function, replace the feature handling section:
     if (options.features && options.features.length > 0) {
       for (const feature of options.features) {
         const featureDir = path.resolve(__dirname, `../templates/${projectType}/${language}/${feature}`);
@@ -136,15 +137,13 @@ export const createProject = async (options) => {
           console.warn(`⚠️ Feature template '${feature}' not found, skipping...`);
           continue;
         }
-        await fs.copy(featureDir, targetDir);
-        await updateAppFile(
-          path.join(targetDir, `src/app.${language === "typescript" ? "ts" : "js"}`),
-          feature,
-          language
-        );
+        
+        // Use the new merge function instead of direct copy
+        await mergeDirectories(featureDir, targetDir);
+        console.log(`✅ Merged ${feature} feature files`);
       }
-
-      // Create or update exo-config.json
+    
+      // Update config file
       const configPath = path.join(targetDir, ".exo-config.json");
       const config = fs.existsSync(configPath)
         ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
