@@ -48,18 +48,44 @@ export const createProject = async (options) => {
     }
 
     // Use provided language or prompt for it
-    const language = options.language || await promptLanguage();
-    const projectName = options.name || `${projectType}-project`;
-    const targetDir = path.resolve(process.cwd(), projectName);
+    const projectName = options.name || `${options.type || 'express'}-project`;
+    
+    // Check if current directory is inside an exo project
+    const checkForExoProject = (dir) => {
+      const configFile = path.join(dir, '.exo-config.json');
+      if (fs.existsSync(configFile)) {
+        return true;
+      }
+      const parentDir = path.dirname(dir);
+      return dir !== parentDir && checkForExoProject(parentDir);
+    };
 
-    // Check if target directory already exists
-    if (fs.existsSync(targetDir)) {
-      console.error(`❌ Directory ${projectName} already exists`);
+    const cwd = process.cwd();
+    if (checkForExoProject(cwd)) {
+      console.error('❌ Cannot create a new project inside an existing exo project');
       return;
     }
 
+    // Continue with target directory check
+    const targetDir = path.resolve(cwd, projectName);
+    const configPath = path.join(targetDir, ".exo-config.json");
+
+    // Ask for language only after directory check
+    const language = options.language || await promptLanguage();
+
     // Create target directory first
     await fs.ensureDir(targetDir);
+
+    // Initialize config with project type
+    const config = {
+      projectType,
+      language,
+      features: [],
+      database: null
+    };
+
+    // Write initial config
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
     const templatesDir = path.resolve(__dirname, `../templates/${projectType}/${language}/base`);
     if (!fs.existsSync(templatesDir)) {
@@ -111,25 +137,17 @@ export const createProject = async (options) => {
       if (!fs.existsSync(dbTemplateDir)) {
         console.warn(`⚠️ Database template for ${selectedDatabase} not found`);
       } else {
-        // Use mergeDirectories instead of direct copy
         await mergeDirectories(dbTemplateDir, targetDir);
         console.log(`✅ Added ${selectedDatabase} database configuration`);
         
-        // Store database info in config
-        const configPath = path.join(targetDir, ".exo-config.json");
-        const config = fs.existsSync(configPath)
-          ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-          : { features: [], database: null, language: null };
-        
+        // Update existing config
+        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
         config.database = selectedDatabase;
-        config.language = language;  // Add language to config
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
       }
     }
 
-    // Handle features if provided
-    // In the createProject function, replace the feature handling section:
+    // Update features in existing config
     if (options.features && options.features.length > 0) {
       for (const feature of options.features) {
         const featureDir = path.resolve(__dirname, `../templates/${projectType}/${language}/${feature}`);
@@ -138,17 +156,12 @@ export const createProject = async (options) => {
           continue;
         }
         
-        // Use the new merge function instead of direct copy
         await mergeDirectories(featureDir, targetDir);
         console.log(`✅ Merged ${feature} feature files`);
       }
     
-      // Update config file
-      const configPath = path.join(targetDir, ".exo-config.json");
-      const config = fs.existsSync(configPath)
-        ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-        : { features: [] };
-      
+      // Update existing config
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
       config.features.push(...options.features);
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     }

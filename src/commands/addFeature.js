@@ -16,11 +16,30 @@ const DATABASE_OPTIONS = {
 
 export const addFeature = async ({ feature, projectDir, list }) => {
   try {
-    // Read config first to check for language
+    // Read config first to check for project type and language
     const configPath = path.join(projectDir, ".exo-config.json");
     let config = fs.existsSync(configPath)
       ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-      : { features: [], database: null, language: null };
+      : null;
+
+    // If no config or no project type, suggest creating a project first
+    if (!config || !config.projectType) {
+      console.error('❌ No exo project found in the current directory.');
+      console.log('💡 Try creating a new project first:');
+      console.log('   exo create <project-name>');
+      return;
+    }
+
+    // Check if feature is compatible with project type
+    const featuresPath = path.resolve(__dirname, `../templates/${config.projectType}/${config.language}`);
+    const availableFeatures = fs.existsSync(featuresPath) 
+      ? fs.readdirSync(featuresPath).filter(f => f !== 'base')
+      : [];
+
+    if (availableFeatures.length === 0) {
+      console.error(`❌ No features available for ${config.projectType} project type.`);
+      return;
+    }
 
     // Use language from config if available, otherwise prompt
     const language = config.language || await promptLanguage();
@@ -31,11 +50,7 @@ export const addFeature = async ({ feature, projectDir, list }) => {
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     }
 
-    const featuresPath = path.resolve(__dirname, `../templates/express/${language}`);
-    const availableFeatures = fs.existsSync(featuresPath) 
-      ? fs.readdirSync(featuresPath).filter(f => f !== 'base')
-      : [];
-
+  
     if (availableFeatures.length === 0) {
       console.error('❌ No features available for this project type.');
       return;
