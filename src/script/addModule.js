@@ -27,7 +27,7 @@ function updateAppTs() {
   if (!appTsContent.includes("authMiddleware")) {
     // Add imports
     const imports = `
-import authMiddleware from './auth/middleware/authMiddleware';
+import authMiddleware from './auth/middlewares/authMiddleware';
 import authRoutes from './auth/routes/authRoutes';`;
 
     appTsContent = appTsContent.replace(

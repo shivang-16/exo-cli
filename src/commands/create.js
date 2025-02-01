@@ -111,11 +111,9 @@ export const createProject = async (options) => {
       if (!fs.existsSync(dbTemplateDir)) {
         console.warn(`⚠️ Database template for ${selectedDatabase} not found`);
       } else {
-        await fs.copy(dbTemplateDir, targetDir);
-        
-        // Update package.json with database dependencies
-        const pkgPath = path.join(targetDir, 'package.json');
-        const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
+        // Use mergeDirectories instead of direct copy
+        await mergeDirectories(dbTemplateDir, targetDir);
+        console.log(`✅ Added ${selectedDatabase} database configuration`);
         
         // Store database info in config
         const configPath = path.join(targetDir, ".exo-config.json");

@@ -49,24 +49,138 @@ export const mergeDirectories = async (sourceDir, targetDir) => {
 };
 
 const mergePackageJson = async (sourcePath, targetPath) => {
-  const sourcePackage = JSON.parse(await fs.readFile(sourcePath, 'utf-8'));
-  const targetPackage = JSON.parse(await fs.readFile(targetPath, 'utf-8'));
+  try {
+    // Read both files
+    const sourceContent = await fs.readFile(sourcePath, 'utf-8');
+    const targetContent = await fs.readFile(targetPath, 'utf-8');
 
-  // Merge dependencies and devDependencies
-  targetPackage.dependencies = {
-    ...targetPackage.dependencies,
-    ...sourcePackage.dependencies
-  };
-  targetPackage.devDependencies = {
-    ...targetPackage.devDependencies,
-    ...sourcePackage.devDependencies
-  };
+    // Clean up JSON content by removing trailing commas and extra whitespace
+    const cleanJson = (content) => {
+      return content
+        .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+        .replace(/\s+/g, ' ')          // Normalize whitespace
+        .trim();
+    };
 
-  // Write merged package.json
-  await fs.writeFile(targetPath, JSON.stringify(targetPackage, null, 2));
+    // Parse source content, handling partial JSON
+    let sourcePackage = {};
+    try {
+      const cleanedSource = cleanJson(sourceContent);
+      if (cleanedSource.trim().startsWith('"dependencies"')) {
+        sourcePackage = JSON.parse(`{${cleanedSource}}`);
+      } else {
+        sourcePackage = JSON.parse(cleanedSource);
+      }
+    } catch (err) {
+      console.error(`❌ Error parsing source package.json: ${err.message}`);
+      return;
+    }
+
+    // Parse target package.json
+    let targetPackage = JSON.parse(cleanJson(targetContent));
+
+    // Initialize dependencies if they don't exist
+    targetPackage.dependencies = targetPackage.dependencies || {};
+    targetPackage.devDependencies = targetPackage.devDependencies || {};
+    
+    // Merge dependencies
+    if (sourcePackage.dependencies) {
+      targetPackage.dependencies = {
+        ...targetPackage.dependencies,
+        ...sourcePackage.dependencies
+      };
+    }
+
+    // Merge devDependencies if they exist
+    if (sourcePackage.devDependencies) {
+      targetPackage.devDependencies = {
+        ...targetPackage.devDependencies,
+        ...sourcePackage.devDependencies
+      };
+    }
+
+    // Write merged package.json with proper formatting
+    await fs.writeFile(targetPath, JSON.stringify(targetPackage, null, 2));
+  } catch (error) {
+    throw new Error(`Error merging package.json: ${error.message}`);
+  }
 };
 
 const mergeCodeFiles = async (sourceContent, targetContent, targetPath) => {
+  // Special handling for server.ts
+  if (path.basename(targetPath) === 'server.ts') {
+    const sourceLines = sourceContent.split('\n');
+    const targetLines = targetContent.split('\n');
+    const newLines = [];
+    const seenLines = new Set();
+    const importSection = [];
+    const serverSection = [];
+
+    // Collect sections from source
+    sourceLines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (trimmedLine.startsWith('import ')) {
+        if (!seenLines.has(trimmedLine)) {
+          importSection.push(line);
+          seenLines.add(trimmedLine);
+        }
+      } else if (trimmedLine && !seenLines.has(trimmedLine)) {
+        serverSection.push(line);
+        seenLines.add(trimmedLine);
+      }
+    });
+
+    // Process target file and add unique lines
+    let hasAddedImports = false;
+    let hasAddedServerCode = false;
+    let isInImportSection = true;
+
+    targetLines.forEach(line => {
+      const trimmedLine = line.trim();
+      
+      // Handle imports
+      if (trimmedLine.startsWith('import ')) {
+        if (!seenLines.has(trimmedLine)) {
+          newLines.push(line);
+          seenLines.add(trimmedLine);
+        }
+        return;
+      }
+
+      // Add collected imports after last original import
+      if (isInImportSection && !trimmedLine.startsWith('import ') && !hasAddedImports) {
+        if (importSection.length > 0) {
+          newLines.push('');
+          importSection.forEach(imp => newLines.push(imp));
+        }
+        hasAddedImports = true;
+        isInImportSection = false;
+      }
+
+      // Handle server initialization code
+      if (trimmedLine.includes('const PORT =')) {
+        newLines.push(line);
+        if (!hasAddedServerCode && serverSection.length > 0) {
+          newLines.push('');
+          serverSection.forEach(serverLine => newLines.push(serverLine));
+          newLines.push('');
+        }
+        hasAddedServerCode = true;
+        return;
+      }
+
+      // Skip duplicate lines
+      if (!seenLines.has(trimmedLine) && trimmedLine) {
+        newLines.push(line);
+        seenLines.add(trimmedLine);
+      }
+    });
+
+    await fs.writeFile(targetPath, newLines.join('\n'));
+    return;
+  }
+
+  // Original mergeCodeFiles logic for other files
   const sourceLines = sourceContent.split('\n');
   const targetLines = targetContent.split('\n');
   const newLines = [];

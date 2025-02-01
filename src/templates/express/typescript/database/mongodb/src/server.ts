@@ -1,3 +1,3 @@
-import ConnectToDB './db/db'
+import ConnectToDB from './db/db'
 
 ConnectToDB();

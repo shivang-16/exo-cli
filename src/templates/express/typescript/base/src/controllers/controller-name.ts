@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { CustomError } from "../middleware/customError";
+import { CustomError } from "../middlewares/error";
 
 export const your_controller = async(req: Request, res: Response, next: NextFunction) => {
     try {
