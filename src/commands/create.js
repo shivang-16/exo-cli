@@ -119,10 +119,12 @@ export const createProject = async (options) => {
         const configPath = path.join(targetDir, ".exo-config.json");
         const config = fs.existsSync(configPath)
           ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-          : { features: [] };
+          : { features: [], database: null, language: null };
         
         config.database = selectedDatabase;
+        config.language = language;  // Add language to config
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
       }
     }
 

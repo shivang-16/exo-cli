@@ -1,6 +1,5 @@
 import fs from "fs-extra";
 import path from "path";
-import { updateAppFile } from "../utils/updateAppFile.js";
 import { promptLanguage } from "../utils/helper.js";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -17,7 +16,21 @@ const DATABASE_OPTIONS = {
 
 export const addFeature = async ({ feature, projectDir, list }) => {
   try {
-    const language = await promptLanguage();
+    // Read config first to check for language
+    const configPath = path.join(projectDir, ".exo-config.json");
+    let config = fs.existsSync(configPath)
+      ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
+      : { features: [], database: null, language: null };
+
+    // Use language from config if available, otherwise prompt
+    const language = config.language || await promptLanguage();
+    
+    // If language wasn't in config, save it
+    if (!config.language) {
+      config.language = language;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    }
+
     const featuresPath = path.resolve(__dirname, `../templates/express/${language}`);
     const availableFeatures = fs.existsSync(featuresPath) 
       ? fs.readdirSync(featuresPath).filter(f => f !== 'base')
@@ -61,10 +74,10 @@ export const addFeature = async ({ feature, projectDir, list }) => {
       return;
     }
 
-    const configPath = path.join(projectDir, ".exo-config.json");
-    let config = fs.existsSync(configPath)
-      ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-      : { features: [] };
+    // const configPath = path.join(projectDir, ".exo-config.json");
+    // let config = fs.existsSync(configPath)
+    //   ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
+    //   : { features: [] };
 
     if (config.features.includes(selectedFeature)) {
       console.log(`✅ The ${selectedFeature} feature is already added.`);
@@ -73,37 +86,37 @@ export const addFeature = async ({ feature, projectDir, list }) => {
 
     // In the addFeature function, replace the feature copying section:
     // Check if auth feature requires database
-    if (selectedFeature === 'auth') {
-      const { database } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'database',
-          message: 'Select a database for authentication:',
-          choices: Object.entries(DATABASE_OPTIONS).map(([value, name]) => ({
-            name,
-            value
-          }))
+    if (selectedFeature === 'auth' || selectedFeature === 'google-auth') {
+      // Check if database is already configured
+      if (!config.database) {
+        const { database } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'database',
+            message: 'Select a database for authentication:',
+            choices: Object.entries(DATABASE_OPTIONS).map(([value, name]) => ({
+              name,
+              value
+            }))
+          }
+        ]);
+
+        // Add database first
+        const dbTemplateDir = path.resolve(__dirname, `../templates/express/${language}/database/${database}`);
+        if (!fs.existsSync(dbTemplateDir)) {
+          console.error(`❌ Database template for ${database} not found`);
+          return;
         }
-      ]);
 
-      // Add database first
-      const dbTemplateDir = path.resolve(__dirname, `../templates/express/${language}/database/${database}`);
-      if (!fs.existsSync(dbTemplateDir)) {
-        console.error(`❌ Database template for ${database} not found`);
-        return;
+        await mergeDirectories(dbTemplateDir, projectDir);
+        console.log(`✅ Added ${database} database configuration`);
+
+        // Update config with database info
+        config.database = database;
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      } else {
+        console.log(`ℹ️ Using existing ${config.database} database configuration`);
       }
-
-      await mergeDirectories(dbTemplateDir, projectDir);
-      console.log(`✅ Added ${database} database configuration`);
-
-      // Update config with database info
-      const configPath = path.join(projectDir, ".exo-config.json");
-      const config = fs.existsSync(configPath)
-        ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-        : { features: [], database: null };
-
-      config.database = database;
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     }
 
     // Continue with feature addition

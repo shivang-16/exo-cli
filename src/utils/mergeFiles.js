@@ -29,7 +29,6 @@ export const mergeDirectories = async (sourceDir, targetDir) => {
             // Special handling for package.json
             await mergePackageJson(sourcePath, targetPath);
           } else if (item.name.endsWith('.ts') || item.name.endsWith('.js')) {
-            // For TypeScript/JavaScript files, merge intelligently
             await mergeCodeFiles(sourceContent, targetContent, targetPath);
           } else {
             // For other files, only copy if different
