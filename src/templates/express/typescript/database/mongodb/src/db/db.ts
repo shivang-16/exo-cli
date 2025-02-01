@@ -6,11 +6,11 @@ dotenv.config();
 let db: mongoose.Connection;
 
 const ConnectToDB = async () => {
-  const DatabaseUrl = process.env.MONGO_DB_URL as string;
+  const DatabaseUrl = process.env.MONGO_DB_URL as string || "mongodb://127.0.0.1:27017/test";
 
   try {
     await mongoose.connect(DatabaseUrl, {
-      autoIndex: true, // Enable automatic index creation
+      autoIndex: true, 
     });
     db = mongoose.connection;
     console.log("DB Connected.");

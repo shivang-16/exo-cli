@@ -19,12 +19,15 @@ program
   .option("-n, --name <name>", "Project name")
   .option("--typescript", "Use TypeScript")
   .option("--javascript", "Use JavaScript")
+  .option("--add <features>", "Add features (comma-separated)")
   .argument("[type]", "Project type (e.g., express, react, next)")
   .action((type, options) => {
+    const features = options.add ? options.add.split(',') : [];
     createProject({ 
       type, 
       name: options.name,
       language: options.typescript ? "typescript" : options.javascript ? "javascript" : null,
+      features,
       ...options 
     });
   });

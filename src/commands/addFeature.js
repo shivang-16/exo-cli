@@ -5,9 +5,15 @@ import { promptLanguage } from "../utils/helper.js";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import inquirer from 'inquirer';
+import { mergeDirectories } from "../utils/mergeFiles.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const DATABASE_OPTIONS = {
+  mongodb: 'MongoDB with Mongoose',
+  postgres: 'PostgreSQL with Prisma'
+};
 
 export const addFeature = async ({ feature, projectDir, list }) => {
   try {
@@ -56,7 +62,7 @@ export const addFeature = async ({ feature, projectDir, list }) => {
     }
 
     const configPath = path.join(projectDir, ".exo-config.json");
-    const config = fs.existsSync(configPath)
+    let config = fs.existsSync(configPath)
       ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
       : { features: [] };
 
@@ -65,10 +71,55 @@ export const addFeature = async ({ feature, projectDir, list }) => {
       return;
     }
 
+    // In the addFeature function, replace the feature copying section:
+    // Check if auth feature requires database
+    if (selectedFeature === 'auth') {
+      const { database } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'database',
+          message: 'Select a database for authentication:',
+          choices: Object.entries(DATABASE_OPTIONS).map(([value, name]) => ({
+            name,
+            value
+          }))
+        }
+      ]);
+
+      // Add database first
+      const dbTemplateDir = path.resolve(__dirname, `../templates/express/${language}/database/${database}`);
+      if (!fs.existsSync(dbTemplateDir)) {
+        console.error(`❌ Database template for ${database} not found`);
+        return;
+      }
+
+      await mergeDirectories(dbTemplateDir, projectDir);
+      console.log(`✅ Added ${database} database configuration`);
+
+      // Update config with database info
+      const configPath = path.join(projectDir, ".exo-config.json");
+      const config = fs.existsSync(configPath)
+        ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
+        : { features: [], database: null };
+
+      config.database = database;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    }
+
+    // Continue with feature addition
     const featureDir = path.resolve(__dirname, `../templates/express/${language}/${selectedFeature}`);
-    await fs.copy(featureDir, projectDir);
-    const appFilePath = path.join(projectDir, `src/app.${language === "typescript" ? "ts" : "js"}`);
-    await updateAppFile(appFilePath, selectedFeature, language);
+    if (!fs.existsSync(featureDir)) {
+      console.error(`❌ Feature template for ${selectedFeature} not found`);
+      return;
+    }
+    
+    await mergeDirectories(featureDir, projectDir);
+    console.log(`✅ Merged ${selectedFeature} feature files`);
+    
+    // Update config with feature
+     config = fs.existsSync(configPath)
+      ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
+      : { features: [], database: null };
 
     config.features.push(selectedFeature);
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));

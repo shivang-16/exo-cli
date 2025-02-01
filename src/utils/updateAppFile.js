@@ -1,59 +1,101 @@
 import fs from "fs-extra";
-import recast from "recast";
+import path from "path";
 
 export const updateAppFile = async (appFilePath, feature, language) => {
-  if (!fs.existsSync(appFilePath)) {
-    throw new Error(`App file not found at ${appFilePath}`);
+  try {
+    if (!fs.existsSync(appFilePath)) {
+      throw new Error(`Base app file not found at ${appFilePath}`);
+    }
+
+    // Get the feature's app file path
+    const featureDir = path.dirname(path.dirname(appFilePath)); // Go up to src directory
+    const featureAppPath = path.join(
+      featureDir, 
+      'features', 
+      feature, 
+      `app.${language === "typescript" ? "ts" : "js"}`
+    );
+
+    if (!fs.existsSync(featureAppPath)) {
+      console.warn(`⚠️ No app file found for feature ${feature}, skipping app file update`);
+      return;
+    }
+
+    // Read both files
+    const baseApp = await fs.readFile(appFilePath, "utf-8");
+    const featureApp = await fs.readFile(featureAppPath, "utf-8");
+
+    // Split files into lines
+    const baseLines = baseApp.split('\n');
+    const featureLines = featureApp.split('\n');
+
+    // Track sections we want to merge
+    const sections = {
+      imports: [],
+      middleware: [],
+      routes: [],
+      other: []
+    };
+
+    // Extract new lines from feature app file
+    featureLines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (trimmedLine && !baseLines.includes(line)) {
+        if (trimmedLine.startsWith('import ')) {
+          sections.imports.push(line);
+        } else if (trimmedLine.startsWith('app.use(')) {
+          sections.middleware.push(line);
+        } else if (trimmedLine.includes('Router')) {
+          sections.routes.push(line);
+        } else {
+          sections.other.push(line);
+        }
+      }
+    });
+
+    // Find insertion points in base app
+    let newContent = baseLines.join('\n');
+    
+    // Add imports at the top after the last import
+    if (sections.imports.length > 0) {
+      const lastImportIndex = baseLines.findLastIndex(line => line.trim().startsWith('import'));
+      if (lastImportIndex !== -1) {
+        const before = newContent.slice(0, newContent.indexOf(baseLines[lastImportIndex]) + baseLines[lastImportIndex].length);
+        const after = newContent.slice(newContent.indexOf(baseLines[lastImportIndex]) + baseLines[lastImportIndex].length);
+        newContent = before + '\n' + sections.imports.join('\n') + after;
+      }
+    }
+
+    // Add middleware before the module.exports or export default
+    if (sections.middleware.length > 0) {
+      const exportIndex = baseLines.findIndex(line => 
+        line.includes('module.exports') || line.includes('export default')
+      );
+      if (exportIndex !== -1) {
+        const insertPoint = newContent.indexOf(baseLines[exportIndex]);
+        newContent = newContent.slice(0, insertPoint) + 
+                    sections.middleware.join('\n') + '\n\n' + 
+                    newContent.slice(insertPoint);
+      }
+    }
+
+    // Add other lines before exports
+    if (sections.other.length > 0) {
+      const exportIndex = baseLines.findIndex(line => 
+        line.includes('module.exports') || line.includes('export default')
+      );
+      if (exportIndex !== -1) {
+        const insertPoint = newContent.indexOf(baseLines[exportIndex]);
+        newContent = newContent.slice(0, insertPoint) + 
+                    sections.other.join('\n') + '\n\n' + 
+                    newContent.slice(insertPoint);
+      }
+    }
+
+    // Write the updated content back to the base app file
+    await fs.writeFile(appFilePath, newContent, "utf-8");
+    console.log(`✅ Updated app file with ${feature} configurations`);
+  } catch (error) {
+    console.error(`❌ Error updating app file: ${error.message}`);
   }
-
-  const code = await fs.readFile(appFilePath, "utf-8");
-  const parser = language === "typescript" 
-    ? (await import("recast/parsers/typescript.js")).default 
-    : (await import("recast/parsers/babel.js")).default;
-
-  const ast = recast.parse(code, { parser });
-
-  const importStatement = recast.parse(`import ${feature}Router from './routes/${feature}';`, {
-    parser
-  }).program.body[0];
-  
-  const middleware = recast.parse(`app.use('/${feature}', ${feature}Router);`, {
-    parser
-  }).program.body[0];
-
-  let importAdded = false;
-  let middlewareAdded = false;
-
-  recast.visit(ast, {
-    visitImportDeclaration(path) {
-      if (path.node.source.value === `./routes/${feature}`) {
-        importAdded = true;
-      }
-      this.traverse(path);
-    },
-    visitExpressionStatement(path) {
-      const { expression } = path.node;
-      if (
-        expression.type === "CallExpression" &&
-        'object' in expression.callee &&
-        'property' in expression.callee &&
-        'name' in expression.callee.object &&
-        'name' in expression.callee.property &&
-        expression.callee.object.name === "app" &&
-        expression.callee.property.name === "use" &&
-        expression.arguments[1] &&
-        'name' in expression.arguments[1] &&
-        expression.arguments[1].name === `${feature}Router`
-      ) {
-        middlewareAdded = true;
-      }
-      this.traverse(path);
-    },
-  });
-
-  if (!importAdded) ast.program.body.unshift(importStatement);
-  if (!middlewareAdded) ast.program.body.push(middleware);
-
-  const updatedCode = recast.print(ast).code;
-  await fs.writeFile(appFilePath, updatedCode, "utf-8");
 };
