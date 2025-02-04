@@ -102,36 +102,12 @@ export const addFeature = async ({ feature, projectDir, list }) => {
     // In the addFeature function, replace the feature copying section:
     // Check if auth feature requires database
     if (selectedFeature === 'auth' || selectedFeature === 'google-auth') {
-      // Check if database is already configured
+      // Check if database is configured
       if (!config.database) {
-        const { database } = await inquirer.prompt([
-          {
-            type: 'list',
-            name: 'database',
-            message: 'Select a database for authentication:',
-            choices: Object.entries(DATABASE_OPTIONS).map(([value, name]) => ({
-              name,
-              value
-            }))
-          }
-        ]);
-
-        // Add database first
-        const dbTemplateDir = path.resolve(__dirname, `../templates/express/${language}/database/${database}`);
-        if (!fs.existsSync(dbTemplateDir)) {
-          console.error(`❌ Database template for ${database} not found`);
-          return;
-        }
-
-        await mergeDirectories(dbTemplateDir, projectDir);
-        console.log(`✅ Added ${database} database configuration`);
-
-        // Update config with database info
-        config.database = database;
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-      } else {
-        console.log(`ℹ️ Using existing ${config.database} database configuration`);
+        console.error(`❌ No database configured. Please add a database first using 'exo add database'`);
+        return;
       }
+      console.log(`ℹ️ Using existing ${config.database} database configuration`);
     }
 
     // Handle direct database addition
@@ -170,24 +146,43 @@ export const addFeature = async ({ feature, projectDir, list }) => {
     }
 
     // Continue with feature addition
-    const featureDir = path.resolve(__dirname, `../templates/express/${language}/${selectedFeature}`);
-    if (!fs.existsSync(featureDir)) {
-      console.error(`❌ Feature template for ${selectedFeature} not found`);
+    if (selectedFeature === 'auth' || selectedFeature === 'auth') {
+      // First copy base auth files
+      const baseAuthDir = path.resolve(__dirname, `../templates/${config.projectType}/${config.language}/auth/base`);
+      if (!fs.existsSync(baseAuthDir)) {
+        console.error(`❌ Base auth template not found`);
+        return;
+      }
+      
+      await mergeDirectories(baseAuthDir, projectDir);
+      console.log(`✅ Added base auth files`);
+
+      // Then copy database-specific auth files
+      const dbAuthDir = path.resolve(__dirname, `../templates/${config.projectType}/${config.language}/auth/${config.database}`);
+      if (!fs.existsSync(dbAuthDir)) {
+        console.error(`❌ Auth template for ${config.database} not found`);
+        return;
+      }
+
+      await mergeDirectories(dbAuthDir, projectDir);
+      console.log(`✅ Added ${config.database}-specific auth files`);
+
+      // Update config and install dependencies
+      config.features.push(selectedFeature);
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      console.log(`🎉 Auth feature added successfully`);
+
+      // Run npm install
+      console.log('📦 Installing dependencies...');
+      const { execa } = await import('execa');
+      try {
+        await execa('npm', ['install'], { cwd: projectDir, stdio: 'inherit' });
+        console.log('✅ Dependencies installed successfully');
+      } catch (error) {
+        console.error('❌ Failed to install dependencies:', error.message);
+      }
       return;
     }
-    
-    await mergeDirectories(featureDir, projectDir);
-    console.log(`✅ Merged ${selectedFeature} feature files`);
-    
-    // Update config with feature
-     config = fs.existsSync(configPath)
-      ? JSON.parse(fs.readFileSync(configPath, "utf-8"))
-      : { features: [], database: null };
-
-    config.features.push(selectedFeature);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    console.log(`🎉 Added ${selectedFeature} feature successfully.`);
 
     // Run npm install after adding feature
     console.log('📦 Installing dependencies...');
