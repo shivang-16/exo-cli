@@ -102,7 +102,7 @@ export const createProject = async (options) => {
           type: 'confirm',
           name: 'wantDatabase',
           message: 'Would you like to set up a database?',
-          default: false
+          default: true 
         }
       ]);
 
@@ -170,6 +170,17 @@ export const createProject = async (options) => {
     if (options.features && options.features.length > 0) {
       console.log(`✅ Added features: ${options.features.join(', ')}`);
     }
+
+    // Run npm install
+    console.log('📦 Installing dependencies...');
+    const { execa } = await import('execa');
+    try {
+      await execa('npm', ['install'], { cwd: targetDir, stdio: 'inherit' });
+      console.log('✅ Dependencies installed successfully');
+    } catch (error) {
+      console.error('❌ Failed to install dependencies:', error.message);
+    }
+
   } catch (error) {
     console.error(`❌ Error creating project: ${error.message}`);
   }

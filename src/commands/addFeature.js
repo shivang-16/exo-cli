@@ -134,6 +134,41 @@ export const addFeature = async ({ feature, projectDir, list }) => {
       }
     }
 
+    // Handle direct database addition
+    if (feature === 'database') {
+      if (config.database) {
+        console.log(`ℹ️ Database (${config.database}) is already configured`);
+        return;
+      }
+
+      const { database } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'database',
+          message: 'Select a database to add:',
+          choices: Object.entries(DATABASE_OPTIONS).map(([value, name]) => ({
+            name,
+            value
+          }))
+        }
+      ]);
+
+      const dbTemplateDir = path.resolve(__dirname, `../templates/${config.projectType}/${config.language}/database/${database}`);
+      if (!fs.existsSync(dbTemplateDir)) {
+        console.error(`❌ Database template for ${database} not found`);
+        return;
+      }
+
+      await mergeDirectories(dbTemplateDir, projectDir);
+      console.log(`✅ Added ${database} database configuration`);
+
+      // Update config with database info
+      config.database = database;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      console.log(`🎉 Database setup completed successfully`);
+      return;
+    }
+
     // Continue with feature addition
     const featureDir = path.resolve(__dirname, `../templates/express/${language}/${selectedFeature}`);
     if (!fs.existsSync(featureDir)) {
@@ -153,6 +188,17 @@ export const addFeature = async ({ feature, projectDir, list }) => {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
     console.log(`🎉 Added ${selectedFeature} feature successfully.`);
+
+    // Run npm install after adding feature
+    console.log('📦 Installing dependencies...');
+    const { execa } = await import('execa');
+    try {
+      await execa('npm', ['install'], { cwd: projectDir, stdio: 'inherit' });
+      console.log('✅ Dependencies installed successfully');
+    } catch (error) {
+      console.error('❌ Failed to install dependencies:', error.message);
+    }
+
   } catch (error) {
     console.error(`❌ Error adding feature: ${error.message}`);
   }
